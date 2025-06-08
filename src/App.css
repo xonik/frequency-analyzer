@@ -43,3 +43,9 @@ body {
     transform: rotate(360deg);
   }
 }
+
+.app {
+  width: 100vw;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}

@@ -1,6 +1,4 @@
 
-const threshold = 2.5 // Threshold for rising edge detection
-
 type FrequencyEntry = { time: number, frequency: number }
 type RateOfChangeEntry = { time: number, frequencyDifference: number, ratePercent: number }
 type Sample = { time: number, value: number }
@@ -15,7 +13,7 @@ export function parseLine(line: string): Sample {
     }
 }
 
-export function createFrequencyProcessor() {
+export function createFrequencyProcessor(threshold = 2.5) {
     let prevSample: Sample | null = null
     let isHigh = false;
     const frequencyList: FrequencyEntry[] = []
