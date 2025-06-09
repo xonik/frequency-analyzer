@@ -1,14 +1,26 @@
 import React, { useContext, useEffect, useState } from 'react';
 import FileUploader from "./components/FileUploader";
-import { calculateFrequencyRateOfChangePercent, createFrequencyProcessor, parseLine } from "./logic/calculator";
+import {
+    average,
+    calculateFrequencyRateOfChangePercent, centsBetweenFrequencies, CentsEntry,
+    createFrequencyProcessor, getMinMaxY,
+    parseLine,
+} from "./logic/calculator";
+import type {
+    FrequencyEntry,
+    RateOfChangeEntry,
+} from "./logic/calculator";
+
 import { FileLinesContext } from "./context/FileLinesContext";
 import { LineChart } from "@mui/x-charts";
 import './App.css';
 
 function App() {
     const { lines } = useContext(FileLinesContext);
-    const [frequencyList, setFrequencyList] = useState<{ time: number, frequency: number }[]>([]);
-    const [rateOfChangeList, setRateOfChangeList] = useState<{ time: number, frequencyDifference: number, ratePercent: number }[]>([]);
+    const [averageFrequency, setAverageFrequency] = useState<number>(0);
+    const [frequencyList, setFrequencyList] = useState<FrequencyEntry[]>([]);
+    const [rateOfChangeList, setRateOfChangeList] = useState<RateOfChangeEntry[]>([]);
+    const [centsDeviationList, setCentsDeviationList] = useState<CentsEntry[]>([]);
     const [chartWidth, setChartWidth] = useState(window.innerWidth);
     const [threshold, setThreshold] = useState<number>(() => {
         const stored = localStorage.getItem('threshold');
@@ -21,14 +33,22 @@ function App() {
 
     useEffect(() => {
         const { processSample, frequencyList: freqList } = createFrequencyProcessor(threshold);
-        lines.forEach(line => {
-            const sample = parseLine(line);
-            if (!isNaN(sample.value)) {
-                processSample(sample);
-            }
-        });
-        const slicedList = freqList.slice(1);
+        const samples = lines.map(parseLine).filter((sample) => !isNaN(sample.value))
+        samples.forEach((sample) => {
+            processSample(sample);
+        })
+
+        // Remove the first entry as it has probably not measured a full
+        // interval.
+        const slicedList = freqList.slice(1)
         setFrequencyList(slicedList);
+
+        const calculatedAverage = average(slicedList)
+        setAverageFrequency(calculatedAverage)
+
+        const cents = slicedList.map(centsBetweenFrequencies(calculatedAverage))
+        setCentsDeviationList(cents);
+
         setRateOfChangeList(calculateFrequencyRateOfChangePercent(slicedList));
     }, [lines, threshold]);
 
@@ -38,19 +58,21 @@ function App() {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    const times = frequencyList.map(entry => entry.time);
+    const frequencyTimes = frequencyList.map(entry => entry.time);
     const frequencies = frequencyList.map(entry => entry.frequency);
-    const minY = frequencies.length ? Math.min(...frequencies) : 0;
-    const maxY = frequencies.length ? Math.max(...frequencies) : 1;
+    const freqYAxis = getMinMaxY(frequencies)
 
     const rateOfChangeTimes = rateOfChangeList.map(entry => entry.time);
     const freqChange = rateOfChangeList.map(entry => entry.frequencyDifference);
-    const minChangeY = freqChange.length ? Math.min(...freqChange) : 0;
-    const maxChangeY = freqChange.length ? Math.max(...freqChange) : 1;
+    const changeYAxis = getMinMaxY(freqChange);
 
     const percentChange = rateOfChangeList.map(entry => entry.ratePercent);
-    const minPercentY = percentChange.length ? Math.min(...percentChange) : 0;
-    const maxPercentY = percentChange.length ? Math.max(...percentChange) : 1;
+    const percentYAxis = getMinMaxY(percentChange);
+
+    const centsTimes = centsDeviationList.map(entry => entry.time);
+    const cents = centsDeviationList.map(entry => entry.cents);
+    const centsYAxis = getMinMaxY(cents)
+
 
     return (
         <div className="app" style={{ width: '100vw' }}>
@@ -69,14 +91,15 @@ function App() {
                     </label>
                 </div>
                 <LineChart
-                    xAxis={[{ data: times, label: "Time" }]}
-                    yAxis={[{ min: minY, max: maxY }]}
+                    xAxis={[{ data: frequencyTimes, label: "Time" }]}
+                    yAxis={[freqYAxis]}
                     series={[
                         {
                             data: frequencies,
-                            label: "Frequency",
+                            label: `Frequency (avg: ${averageFrequency.toFixed(2)} Hz)`,
                             area: false,
                             showMark: false,
+                            curve: 'linear'
                         }
                     ]}
                     width={chartWidth}
@@ -84,13 +107,14 @@ function App() {
                 />
                 <LineChart
                     xAxis={[{ data: rateOfChangeTimes, label: "Time" }]}
-                    yAxis={[{ min: minChangeY, max: maxChangeY }]}
+                    yAxis={[changeYAxis]}
                     series={[
                         {
                             data: freqChange,
                             label: "Frequency Change",
                             area: false,
                             showMark: false,
+                            curve: 'linear'
                         }
                     ]}
                     width={chartWidth}
@@ -98,15 +122,32 @@ function App() {
                 />
                 <LineChart
                     xAxis={[{ data: rateOfChangeTimes, label: "Time" }]}
-                    yAxis={[{ min: minPercentY, max: maxPercentY }]}
+                    yAxis={[percentYAxis]}
                     series={[
                         {
-                            data: freqChange,
+                            data: percentChange,
                             label: "Percent Change",
                             area: false,
                             showMark: false,
+                            curve: 'linear'
                         }
                     ]}
+                    width={chartWidth}
+                    height={300}
+                />
+                <LineChart
+                    xAxis={[{ data: centsTimes, label: "Time" }]}
+                    yAxis={[centsYAxis]}
+                    series={[
+                        {
+                            data: cents,
+                            label: `Cents from average (min: ${centsYAxis.min.toFixed(2)}, max: ${centsYAxis.max.toFixed(2)})`,
+                            area: false,
+                            showMark: false,
+                            curve: 'linear'
+                        }
+                    ]}
+
                     width={chartWidth}
                     height={300}
                 />
