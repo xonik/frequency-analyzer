@@ -26,10 +26,17 @@ function App() {
         const stored = localStorage.getItem('threshold');
         return stored ? parseFloat(stored) : 2.5;
     });
+    const [sliceLength, setSliceLength] = useState<string>(() => {
+        return localStorage.getItem('sliceLength') ?? '';
+    });
 
     useEffect(() => {
         localStorage.setItem('threshold', threshold.toString());
     }, [threshold]);
+
+    useEffect(() => {
+        localStorage.setItem('sliceLength', sliceLength);
+    }, [sliceLength]);
 
     useEffect(() => {
         const { processSample, frequencyList: freqList } = createFrequencyProcessor(threshold);
@@ -40,7 +47,16 @@ function App() {
 
         // Remove the first entry as it has probably not measured a full
         // interval.
-        const slicedList = freqList.slice(1)
+        let slicedList = freqList.slice(1)
+
+        // Apply sliceLength if valid and not empty
+        if (sliceLength !== '') {
+            const n = Number(sliceLength);
+            if (!isNaN(n) && n > 0) {
+                slicedList = slicedList.slice(-n);
+            }
+        }
+
         setFrequencyList(slicedList);
 
         const calculatedAverage = average(slicedList)
@@ -50,7 +66,7 @@ function App() {
         setCentsDeviationList(cents);
 
         setRateOfChangeList(calculateFrequencyRateOfChangePercent(slicedList));
-    }, [lines, threshold]);
+    }, [lines, threshold, sliceLength]);
 
     useEffect(() => {
         const handleResize = () => setChartWidth(window.innerWidth);
@@ -77,8 +93,8 @@ function App() {
     return (
         <div className="app" style={{ width: '100vw' }}>
             <div>
-                <FileUploader/>
-                <div style={{ margin: '16px 0' }}>
+                <div className="input-row">
+                    <FileUploader/>
                     <label>
                         Threshold:&nbsp;
                         <input
@@ -87,6 +103,18 @@ function App() {
                             value={threshold}
                             onChange={e => setThreshold(Number(e.target.value))}
                             style={{ width: 80 }}
+                        />
+                    </label>
+                    <label style={{ marginLeft: 24 }}>
+                        Samples:&nbsp;
+                        <input
+                            type="number"
+                            step="1"
+                            min="1"
+                            value={sliceLength}
+                            onChange={e => setSliceLength(e.target.value)}
+                            style={{ width: 80 }}
+                            placeholder="All"
                         />
                     </label>
                 </div>

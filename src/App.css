@@ -49,3 +49,13 @@ body {
   box-sizing: border-box;
   overflow-x: hidden;
 }
+
+.input-row {
+  display: flex;
+  align-items: center;
+  margin: 16px 0;
+}
+.input-row label {
+  display: flex;
+  align-items: center;
+}
