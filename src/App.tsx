@@ -3,8 +3,8 @@ import FileUploader from "./components/FileUploader";
 import {
     average,
     calculateFrequencyRateOfChangePercent, centsBetweenFrequencies, CentsEntry,
-    createFrequencyProcessor, getMinMaxY,
-    parseLine,
+    createFrequencyProcessor, filterByMedianDeviation, findValueColumn, getMinMaxY,
+    parseLine, VoltsEntry,
 } from "./logic/calculator";
 import type {
     FrequencyEntry,
@@ -21,7 +21,11 @@ function App() {
     const [frequencyList, setFrequencyList] = useState<FrequencyEntry[]>([]);
     const [rateOfChangeList, setRateOfChangeList] = useState<RateOfChangeEntry[]>([]);
     const [centsDeviationList, setCentsDeviationList] = useState<CentsEntry[]>([]);
+    const [voltsDeviationList, setVoltsDeviationList] = useState<VoltsEntry[]>([]);
     const [chartWidth, setChartWidth] = useState(window.innerWidth);
+    const [valueColumn, setValueColumn] = useState<number>(1);
+
+
     const [threshold, setThreshold] = useState<number>(() => {
         const stored = localStorage.getItem('threshold');
         return stored ? parseFloat(stored) : 2.5;
@@ -29,6 +33,15 @@ function App() {
     const [sliceLength, setSliceLength] = useState<string>(() => {
         return localStorage.getItem('sliceLength') ?? '';
     });
+
+    const [medianFilter, setMedianFilter] = useState<boolean>(() => {
+        const stored = localStorage.getItem('medianFilter');
+        return stored ? stored === 'true' : false;
+    });
+
+    const [loading, setLoading] = useState(false);
+
+    const columnNames = lines.length > 0 ? lines[0].split(',').slice(1) : [];
 
     useEffect(() => {
         localStorage.setItem('threshold', threshold.toString());
@@ -39,34 +52,58 @@ function App() {
     }, [sliceLength]);
 
     useEffect(() => {
-        const { processSample, frequencyList: freqList } = createFrequencyProcessor(threshold);
-        const samples = lines.map(parseLine).filter((sample) => !isNaN(sample.value))
-        samples.forEach((sample) => {
-            processSample(sample);
-        })
+        localStorage.setItem('medianFilter', medianFilter.toString());
+    }, [medianFilter]);
 
-        // Remove the first entry as it has probably not measured a full
-        // interval.
-        let slicedList = freqList.slice(1)
+    useEffect(() => {
+        setLoading(true);
 
-        // Apply sliceLength if valid and not empty
-        if (sliceLength !== '') {
-            const n = Number(sliceLength);
-            if (!isNaN(n) && n > 0) {
-                slicedList = slicedList.slice(-n);
+        setTimeout(() => { // Simulate async, remove if not needed
+
+            if(lines.length < 1) {
+                setLoading(false);
+                return
             }
-        }
 
-        setFrequencyList(slicedList);
+            const { processSample, frequencyList: freqList } = createFrequencyProcessor(threshold);
 
-        const calculatedAverage = average(slicedList)
-        setAverageFrequency(calculatedAverage)
+            const samples = lines.slice(1).map((line) => parseLine(line, valueColumn))
 
-        const cents = slicedList.map(centsBetweenFrequencies(calculatedAverage))
-        setCentsDeviationList(cents);
+            samples.forEach((sample) => {
+                processSample(sample);
+            })
 
-        setRateOfChangeList(calculateFrequencyRateOfChangePercent(slicedList));
-    }, [lines, threshold, sliceLength]);
+            // Remove the first entry as it has probably not measured a full
+            // interval.
+            let slicedList = freqList.slice(1)
+
+            // Apply sliceLength if valid and not empty
+            if (sliceLength !== '') {
+                const n = Number(sliceLength);
+                if (!isNaN(n) && n > 0) {
+                    slicedList = slicedList.slice(-n);
+                }
+            }
+
+            if (medianFilter) {
+                slicedList = filterByMedianDeviation(slicedList)
+            }
+
+            setFrequencyList(slicedList);
+
+            const calculatedAverage = average(slicedList)
+            setAverageFrequency(calculatedAverage)
+
+            const cents = slicedList.map(centsBetweenFrequencies(calculatedAverage))
+            const volts = cents.map(
+                (entry) => ({ time: entry.time, volts: 1000 * entry.cents / 1200 }))
+            setCentsDeviationList(cents);
+            setVoltsDeviationList(volts);
+
+            setRateOfChangeList(calculateFrequencyRateOfChangePercent(slicedList));
+            setLoading(false);
+        }, 10);
+    }, [lines, threshold, sliceLength, medianFilter, valueColumn]);
 
     useEffect(() => {
         const handleResize = () => setChartWidth(window.innerWidth);
@@ -89,9 +126,23 @@ function App() {
     const cents = centsDeviationList.map(entry => entry.cents);
     const centsYAxis = getMinMaxY(cents)
 
+    const voltsTimes = voltsDeviationList.map(entry => entry.time);
+    const volts = voltsDeviationList.map(entry => entry.volts);
+    const voltsYAxis = getMinMaxY(volts)
 
     return (
         <div className="app" style={{ width: '100vw' }}>
+            {loading && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0, left: 0, width: '100vw', height: '100vh',
+                    background: 'rgba(255,255,255,0.7)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    zIndex: 9999
+                }}>
+                    <div className="spinner"/>
+                </div>
+            )}
             <div>
                 <div className="input-row">
                     <FileUploader/>
@@ -117,6 +168,26 @@ function App() {
                             placeholder="All"
                         />
                     </label>
+                    <label style={{ marginLeft: 24 }}>
+                        <input
+                            type="checkbox"
+                            checked={medianFilter}
+                            onChange={e => setMedianFilter(e.target.checked)}
+                        />
+                        &nbsp;Median filter
+                    </label>
+                    <label style={{ marginLeft: 24 }}>
+                        Value column:&nbsp;
+                        <select
+                            value={valueColumn}
+                            onChange={e => setValueColumn(Number(e.target.value))}
+                            disabled={columnNames.length === 0}
+                        >
+                            {columnNames.map((name, idx) => (
+                                <option key={idx + 1} value={idx + 1}>{name}</option>
+                            ))}
+                        </select>
+                    </label>
                 </div>
                 <LineChart
                     xAxis={[{ data: frequencyTimes, label: "Time" }]}
@@ -124,12 +195,44 @@ function App() {
                     series={[
                         {
                             data: frequencies,
-                            label: `Frequency (avg: ${averageFrequency.toFixed(2)} Hz)`,
+                            label: `Frequency (avg: ${averageFrequency.toFixed(2)} Hz), ${columnNames[valueColumn - 1] || ''}`,
                             area: false,
                             showMark: false,
                             curve: 'linear'
                         }
                     ]}
+                    width={chartWidth}
+                    height={300}
+                />
+                <LineChart
+                    xAxis={[{ data: centsTimes, label: "Time" }]}
+                    yAxis={[centsYAxis]}
+                    series={[
+                        {
+                            data: cents,
+                            label: `Cents from average (min: ${centsYAxis.min.toFixed(2)}, max: ${centsYAxis.max.toFixed(2)})`,
+                            area: false,
+                            showMark: false,
+                            curve: 'linear'
+                        }
+                    ]}
+
+                    width={chartWidth}
+                    height={300}
+                />
+                <LineChart
+                    xAxis={[{ data: voltsTimes, label: "Time" }]}
+                    yAxis={[voltsYAxis]}
+                    series={[
+                        {
+                            data: volts,
+                            label: `Millivolts from average (min: ${voltsYAxis.min.toFixed(2)}, max: ${voltsYAxis.max.toFixed(2)})`,
+                            area: false,
+                            showMark: false,
+                            curve: 'linear'
+                        }
+                    ]}
+
                     width={chartWidth}
                     height={300}
                 />
@@ -160,22 +263,6 @@ function App() {
                             curve: 'linear'
                         }
                     ]}
-                    width={chartWidth}
-                    height={300}
-                />
-                <LineChart
-                    xAxis={[{ data: centsTimes, label: "Time" }]}
-                    yAxis={[centsYAxis]}
-                    series={[
-                        {
-                            data: cents,
-                            label: `Cents from average (min: ${centsYAxis.min.toFixed(2)}, max: ${centsYAxis.max.toFixed(2)})`,
-                            area: false,
-                            showMark: false,
-                            curve: 'linear'
-                        }
-                    ]}
-
                     width={chartWidth}
                     height={300}
                 />

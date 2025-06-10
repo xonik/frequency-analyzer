@@ -1,17 +1,24 @@
-
 export type FrequencyEntry = { time: number, frequency: number }
 export type CentsEntry = { time: number, cents: number }
+export type VoltsEntry = { time: number, volts: number }
 export type RateOfChangeEntry = { time: number, frequencyDifference: number, ratePercent: number }
 export type Sample = { time: number, value: number }
 
-export function parseLine(line: string): Sample {
+export function parseLine(line: string, valueColumn: number): Sample {
     const parts = line.split(',')
     const time = parseFloat(parts[0])
-    const value = parseFloat(parts[1])
+    const value = parseFloat(parts[valueColumn])
     return {
         time,
         value
     }
+}
+
+export function findValueColumn(line: string, label: string): { column: number, label: string } {
+    const parts = line.split(',');
+    const idx = parts.findIndex(col => col.trim() === label);
+    if (idx !== -1) return { column: idx, label: parts[idx] };
+    return { column: 1, label: parts[1] };
 }
 
 export function createFrequencyProcessor(threshold = 2.5) {
@@ -61,8 +68,8 @@ function roundToFiveSignificantDigits(num: number): number {
     return Number(num.toPrecision(5))
 }
 
-export function centsBetweenFrequencies(f1: number){
-    return ({time, frequency: f2}: FrequencyEntry): CentsEntry => {
+export function centsBetweenFrequencies(f1: number) {
+    return ({ time, frequency: f2 }: FrequencyEntry): CentsEntry => {
         if (f1 <= 0 || f2 <= 0) throw new Error("Frequencies must be positive numbers.");
         return {
             time,
@@ -83,4 +90,22 @@ export function getMinMaxY(values: number[]): { min: number, max: number } {
         min: Math.min(...values),
         max: Math.max(...values)
     };
+}
+
+function medianFrequency(entries: FrequencyEntry[]): number {
+    if (entries.length === 0) return NaN;
+    const freqs = entries.map(e => e.frequency).sort((a, b) => a - b);
+    const mid = Math.floor(freqs.length / 2);
+    if (freqs.length % 2 === 0) {
+        return (freqs[mid - 1] + freqs[mid]) / 2;
+    } else {
+        return freqs[mid];
+    }
+}
+
+export function filterByMedianDeviation(entries: FrequencyEntry[]): FrequencyEntry[] {
+    const median = medianFrequency(entries);
+    console.log('Median frequency:', median);
+    if (isNaN(median) || median === 0) return [];
+    return entries.filter(e => Math.abs(e.frequency - median) / median <= 0.5);
 }
