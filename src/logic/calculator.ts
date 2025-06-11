@@ -103,9 +103,18 @@ function medianFrequency(entries: FrequencyEntry[]): number {
     }
 }
 
-export function filterByMedianDeviation(entries: FrequencyEntry[]): FrequencyEntry[] {
+export function filterByMedianDeviation(entries: FrequencyEntry[], maxDeviation = 0.5): FrequencyEntry[] {
     const median = medianFrequency(entries);
-    console.log('Median frequency:', median);
     if (isNaN(median) || median === 0) return [];
-    return entries.filter(e => Math.abs(e.frequency - median) / median <= 0.5);
+    return entries.filter(e => Math.abs(e.frequency - median) / median <= maxDeviation);
+}
+
+export function filterByPercentile(entries: FrequencyEntry[], lower = 0.025, upper = 0.975): FrequencyEntry[] {
+    if (entries.length === 0) return [];
+    const sorted = [...entries].sort((a, b) => a.frequency - b.frequency);
+    const lowerIdx = Math.floor(lower * sorted.length);
+    const upperIdx = Math.ceil(upper * sorted.length) - 1;
+    const min = sorted[lowerIdx].frequency;
+    const max = sorted[upperIdx].frequency;
+    return entries.filter(e => e.frequency >= min && e.frequency <= max);
 }

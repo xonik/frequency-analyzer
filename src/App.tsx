@@ -3,7 +3,7 @@ import FileUploader from "./components/FileUploader";
 import {
     average,
     calculateFrequencyRateOfChangePercent, centsBetweenFrequencies, CentsEntry,
-    createFrequencyProcessor, filterByMedianDeviation,
+    createFrequencyProcessor, filterByMedianDeviation, filterByPercentile,
     parseLine, Sample, VoltsEntry,
 } from "./logic/calculator";
 import type {
@@ -27,12 +27,15 @@ function App() {
     const [centsDeviationList, setCentsDeviationList] = useState<CentsEntry[]>([]);
     const [voltsDeviationList, setVoltsDeviationList] = useState<VoltsEntry[]>([]);
     const [chartWidth, setChartWidth] = useState(window.innerWidth);
-    const [frequencyColumn, setFrequencyColumn] = useState<number>(1);
-    const [waveColumn, setWaveColumn] = useState<number>(1);
     const [loading, setLoading] = useState(false);
 
+    const [frequencyColumn, setFrequencyColumn] = usePersistedState<number>('frequencyColumn', 1);
+    const [waveColumn, setWaveColumn] = usePersistedState<number>('waveColumn', 1);
     const [sliceLength, setSliceLength] = usePersistedState<string>('sliceLength', '');
     const [medianFilter, setMedianFilter] = usePersistedState<boolean>('medianFilter', false);
+    const [medianDeviation, setMedianDeviation] = usePersistedState<number>('medianDeviation', 0.5);
+    const [percentileFilter, setPercentileFilter] = usePersistedState<boolean>('percentileFilter', false);
+    const [percentile, setPercentile] = usePersistedState<number>('percentile', 95);
     const [threshold, setThreshold] = usePersistedState<number>("threshold", 2.5);
 
     const columnNames = lines.length > 0 ? lines[0].split(',').slice(1) : [];
@@ -73,7 +76,13 @@ function App() {
             }
 
             if (medianFilter) {
-                slicedList = filterByMedianDeviation(slicedList)
+                slicedList = filterByMedianDeviation(slicedList, medianDeviation);
+            }
+
+            if (percentileFilter) {
+                const lowerPercentile = (100-percentile) / 100
+                const upperPercentile = percentile / 100
+                slicedList = filterByPercentile(slicedList, lowerPercentile, upperPercentile);
             }
 
             setFrequencyList(slicedList);
@@ -90,7 +99,7 @@ function App() {
             setRateOfChangeList(calculateFrequencyRateOfChangePercent(slicedList));
             setLoading(false);
         }, 10);
-    }, [lines, threshold, sliceLength, medianFilter, frequencyColumn]);
+    }, [lines, threshold, sliceLength, medianFilter, frequencyColumn, medianDeviation, percentileFilter, percentile]);
 
     useEffect(() => {
         const handleResize = () => setChartWidth(window.innerWidth);
@@ -144,6 +153,36 @@ function App() {
                         />
                         &nbsp;Median filter
                     </label>
+                    <label style={{ marginLeft: 8 }}>
+                        Max deviation:&nbsp;
+                        <input
+                            type="number"
+                            step="0.05"
+                            min="0"
+                            value={medianDeviation}
+                            onChange={e => setMedianDeviation(Number(e.target.value))}
+                            style={{ width: 60 }}
+                        />
+                    </label>
+                    <label style={{ marginLeft: 24 }}>
+                        <input
+                            type="checkbox"
+                            checked={percentileFilter}
+                            onChange={e => setPercentileFilter(e.target.checked)}
+                        />
+                        &nbsp;Percentile filter
+                    </label>
+                    <label style={{ marginLeft: 8 }}>
+                        Percentile:&nbsp;
+                        <input
+                            type="number"
+                            step="1"
+                            min="0"
+                            value={percentile}
+                            onChange={e => setPercentile(Number(e.target.value))}
+                            style={{ width: 60 }}
+                        />
+                    </label>
                     <Dropdown
                         label="Frequency column:"
                         value={frequencyColumn}
@@ -161,8 +200,12 @@ function App() {
                         style={{ marginLeft: 24 }}
                     />
                 </div>
-                <BitmapPlot samples={waveSamples} width={chartWidth - 100} height={200} marginLeft={50}
-                            marginRight={40}/>
+                <BitmapPlot
+                    samples={waveSamples}
+                    width={chartWidth - 100}
+                    height={200}
+                    marginLeft={55}
+                    marginRight={40}/>
                 <CommonLineChart
                     data={frequencyList}
                     yProp="frequency"
