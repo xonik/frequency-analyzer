@@ -201,6 +201,7 @@ function App() {
                     />
                 </div>
                 <BitmapPlot
+                    label={`${columnNames[waveColumn - 1] || 'Waveform'} waveform`}
                     samples={waveSamples}
                     width={chartWidth - 100}
                     height={200}

@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import type { Sample } from '../logic/calculator';
 
 type BitmapPlotProps = {
+    label: string;
     samples: Sample[];
     width?: number;
     height?: number;
@@ -10,6 +11,7 @@ type BitmapPlotProps = {
 };
 
 const BitmapPlot: React.FC<BitmapPlotProps> = ({
+                                                   label,
                                                    samples,
                                                    width = 600,
                                                    height = 200,
@@ -18,17 +20,17 @@ const BitmapPlot: React.FC<BitmapPlotProps> = ({
                                                }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
+    // Compute min and max
+    const values = samples.map(s => s.value).filter(v => typeof v === 'number' && !isNaN(v));
+    const min = values.length > 0 ? Math.min(...values) : 0;
+    const max = values.length > 0 ? Math.max(...values) : 0;
+
     useEffect(() => {
         if (!canvasRef.current || samples.length === 0) return;
         const ctx = canvasRef.current.getContext('2d');
         if (!ctx) return;
 
         ctx.clearRect(0, 0, width, height);
-
-        // Find min/max for scaling
-        const values = samples.map(s => s.value).filter(v => typeof v === 'number' && !isNaN(v));
-        const min = Math.min(...values);
-        const max = Math.max(...values);
 
         // Draw line
         ctx.beginPath();
@@ -41,15 +43,20 @@ const BitmapPlot: React.FC<BitmapPlotProps> = ({
         ctx.strokeStyle = '#d21919';
         ctx.lineWidth = 0.5;
         ctx.stroke();
-    }, [samples, width, height]);
+    }, [samples, width, height, min, max]);
 
     return (
-        <canvas
-            ref={canvasRef}
-            width={width}
-            height={height}
-            style={{ border: '1px solid #ccc', marginLeft, marginRight }}
-        />
+        <div style={{ marginLeft, marginRight }}>
+            <div style={{ marginBottom: 4, fontSize: 16, color: '#555' }}>
+                {label} (Min: {min.toFixed(2)} &nbsp;|&nbsp; Max: {max.toFixed(2)})
+            </div>
+            <canvas
+                ref={canvasRef}
+                width={width}
+                height={height}
+                style={{ border: '1px solid #ccc' }}
+            />
+        </div>
     );
 };
 
