@@ -28,6 +28,7 @@ function App() {
     const [voltsDeviationList, setVoltsDeviationList] = useState<VoltsEntry[]>([]);
     const [chartWidth, setChartWidth] = useState(window.innerWidth);
     const [loading, setLoading] = useState(false);
+    const [lastTimestamp, setLastTimestamp] = useState<number | undefined>(undefined);
 
     const [frequencyColumn, setFrequencyColumn] = usePersistedState<number>('frequencyColumn', 1);
     const [waveColumn, setWaveColumn] = usePersistedState<number>('waveColumn', 1);
@@ -42,9 +43,13 @@ function App() {
 
 
     useEffect(() => {
-        const waveSamples = lines.slice(1).map(line => parseLine(line, waveColumn));
+        let waveSamples = lines.slice(1).map(line => parseLine(line, waveColumn));
+        if(lastTimestamp){
+            const firstToCut = waveSamples.findIndex(sample => sample.time > lastTimestamp)
+            waveSamples = waveSamples.slice(0, firstToCut)
+        }
         setWaveSamples(waveSamples)
-    }, [lines, waveColumn]);
+    }, [lines, waveColumn, lastTimestamp]);
 
     useEffect(() => {
         setLoading(true);
@@ -71,8 +76,11 @@ function App() {
             if (sliceLength !== '') {
                 const n = Number(sliceLength);
                 if (!isNaN(n) && n > 0) {
-                    slicedList = slicedList.slice(-n);
+                    slicedList = slicedList.slice(0, n);
                 }
+                setLastTimestamp(slicedList[slicedList.length - 1]?.time || undefined);
+            } else {
+                setLastTimestamp(undefined)
             }
 
             if (medianFilter) {
@@ -134,7 +142,7 @@ function App() {
                         />
                     </label>
                     <label style={{ marginLeft: 24 }}>
-                        Samples:&nbsp;
+                        Cycles:&nbsp;
                         <input
                             type="number"
                             step="1"

@@ -14,13 +14,6 @@ export function parseLine(line: string, valueColumn: number): Sample {
     }
 }
 
-export function findValueColumn(line: string, label: string): { column: number, label: string } {
-    const parts = line.split(',');
-    const idx = parts.findIndex(col => col.trim() === label);
-    if (idx !== -1) return { column: idx, label: parts[idx] };
-    return { column: 1, label: parts[1] };
-}
-
 export function createFrequencyProcessor(threshold = 2.5) {
     let prevSample: Sample | null = null
     let isHigh = false;
