@@ -3,7 +3,7 @@ import FileUploader from "./components/FileUploader";
 import {
     average,
     calculateFrequencyRateOfChangePercent, centsBetweenFrequencies, CentsEntry,
-    createFrequencyProcessor, filterByMedianDeviation, findValueColumn, getMinMaxY,
+    createFrequencyProcessor, filterByMedianDeviation,
     parseLine, Sample, VoltsEntry,
 } from "./logic/calculator";
 import type {
@@ -12,9 +12,11 @@ import type {
 } from "./logic/calculator";
 
 import { FileLinesContext } from "./context/FileLinesContext";
-import { LineChart } from "@mui/x-charts";
-import './App.css';
 import BitmapPlot from "./components/BitmapPlot";
+import CommonLineChart from "./components/CommonLineChart";
+import Dropdown from "./components/Dropdown";
+import usePersistedState from "./hooks/usePersistedState";
+import './App.css';
 
 function App() {
     const { lines } = useContext(FileLinesContext);
@@ -27,36 +29,14 @@ function App() {
     const [chartWidth, setChartWidth] = useState(window.innerWidth);
     const [frequencyColumn, setFrequencyColumn] = useState<number>(1);
     const [waveColumn, setWaveColumn] = useState<number>(1);
-
-
-    const [threshold, setThreshold] = useState<number>(() => {
-        const stored = localStorage.getItem('threshold');
-        return stored ? parseFloat(stored) : 2.5;
-    });
-    const [sliceLength, setSliceLength] = useState<string>(() => {
-        return localStorage.getItem('sliceLength') ?? '';
-    });
-
-    const [medianFilter, setMedianFilter] = useState<boolean>(() => {
-        const stored = localStorage.getItem('medianFilter');
-        return stored ? stored === 'true' : false;
-    });
-
     const [loading, setLoading] = useState(false);
+
+    const [sliceLength, setSliceLength] = usePersistedState<string>('sliceLength', '');
+    const [medianFilter, setMedianFilter] = usePersistedState<boolean>('medianFilter', false);
+    const [threshold, setThreshold] = usePersistedState<number>("threshold", 2.5);
 
     const columnNames = lines.length > 0 ? lines[0].split(',').slice(1) : [];
 
-    useEffect(() => {
-        localStorage.setItem('threshold', threshold.toString());
-    }, [threshold]);
-
-    useEffect(() => {
-        localStorage.setItem('sliceLength', sliceLength);
-    }, [sliceLength]);
-
-    useEffect(() => {
-        localStorage.setItem('medianFilter', medianFilter.toString());
-    }, [medianFilter]);
 
     useEffect(() => {
         const waveSamples = lines.slice(1).map(line => parseLine(line, waveColumn));
@@ -68,7 +48,7 @@ function App() {
 
         setTimeout(() => { // Simulate async, remove if not needed
 
-            if(lines.length < 1) {
+            if (lines.length < 1) {
                 setLoading(false);
                 return
             }
@@ -118,25 +98,6 @@ function App() {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    const frequencyTimes = frequencyList.map(entry => entry.time);
-    const frequencies = frequencyList.map(entry => entry.frequency);
-    const freqYAxis = getMinMaxY(frequencies)
-
-    const rateOfChangeTimes = rateOfChangeList.map(entry => entry.time);
-    const freqChange = rateOfChangeList.map(entry => entry.frequencyDifference);
-    const changeYAxis = getMinMaxY(freqChange);
-
-    const percentChange = rateOfChangeList.map(entry => entry.ratePercent);
-    const percentYAxis = getMinMaxY(percentChange);
-
-    const centsTimes = centsDeviationList.map(entry => entry.time);
-    const cents = centsDeviationList.map(entry => entry.cents);
-    const centsYAxis = getMinMaxY(cents)
-
-    const voltsTimes = voltsDeviationList.map(entry => entry.time);
-    const volts = voltsDeviationList.map(entry => entry.volts);
-    const voltsYAxis = getMinMaxY(volts)
-
     return (
         <div className="app" style={{ width: '100vw' }}>
             {loading && (
@@ -183,106 +144,53 @@ function App() {
                         />
                         &nbsp;Median filter
                     </label>
-                    <label style={{ marginLeft: 24 }}>
-                        Frequency column:&nbsp;
-                        <select
-                            value={frequencyColumn}
-                            onChange={e => setFrequencyColumn(Number(e.target.value))}
-                            disabled={columnNames.length === 0}
-                        >
-                            {columnNames.map((name, idx) => (
-                                <option key={idx + 1} value={idx + 1}>{name}</option>
-                            ))}
-                        </select>
-                    </label>
-                    <label style={{ marginLeft: 24 }}>
-                        Wave column:&nbsp;
-                        <select
-                            value={waveColumn}
-                            onChange={e => setWaveColumn(Number(e.target.value))}
-                            disabled={columnNames.length === 0}
-                        >
-                            {columnNames.map((name, idx) => (
-                                <option key={idx + 1} value={idx + 1}>{name}</option>
-                            ))}
-                        </select>
-                    </label>
+                    <Dropdown
+                        label="Frequency column:"
+                        value={frequencyColumn}
+                        options={columnNames}
+                        onChange={setFrequencyColumn}
+                        disabled={columnNames.length === 0}
+                        style={{ marginLeft: 24 }}
+                    />
+                    <Dropdown
+                        label="Wave column:"
+                        value={waveColumn}
+                        options={columnNames}
+                        onChange={setWaveColumn}
+                        disabled={columnNames.length === 0}
+                        style={{ marginLeft: 24 }}
+                    />
                 </div>
-                <BitmapPlot samples={waveSamples} width={chartWidth-100} height={200} marginLeft={50} marginRight={40} />
-                <LineChart
-                    xAxis={[{ data: frequencyTimes, label: "Time" }]}
-                    yAxis={[freqYAxis]}
-                    series={[
-                        {
-                            data: frequencies,
-                            label: `Frequency (avg: ${averageFrequency.toFixed(2)} Hz), ${columnNames[frequencyColumn - 1] || ''}`,
-                            area: false,
-                            showMark: false,
-                            curve: 'linear'
-                        }
-                    ]}
+                <BitmapPlot samples={waveSamples} width={chartWidth - 100} height={200} marginLeft={50}
+                            marginRight={40}/>
+                <CommonLineChart
+                    data={frequencyList}
+                    yProp="frequency"
+                    seriesLabel={`Frequency (avg: ${averageFrequency.toFixed(2)} Hz), ${columnNames[frequencyColumn - 1] || ''}`}
                     width={chartWidth}
-                    height={300}
                 />
-                <LineChart
-                    xAxis={[{ data: centsTimes, label: "Time" }]}
-                    yAxis={[centsYAxis]}
-                    series={[
-                        {
-                            data: cents,
-                            label: `Cents from average (min: ${centsYAxis.min.toFixed(2)}, max: ${centsYAxis.max.toFixed(2)})`,
-                            area: false,
-                            showMark: false,
-                            curve: 'linear'
-                        }
-                    ]}
-
+                <CommonLineChart
+                    data={centsDeviationList}
+                    yProp="cents"
+                    seriesLabel="Cents from average"
                     width={chartWidth}
-                    height={300}
                 />
-                <LineChart
-                    xAxis={[{ data: voltsTimes, label: "Time" }]}
-                    yAxis={[voltsYAxis]}
-                    series={[
-                        {
-                            data: volts,
-                            label: `Millivolts from average (min: ${voltsYAxis.min.toFixed(2)}, max: ${voltsYAxis.max.toFixed(2)})`,
-                            area: false,
-                            showMark: false,
-                            curve: 'linear'
-                        }
-                    ]}
-
+                <CommonLineChart
+                    data={voltsDeviationList}
+                    yProp="volts"
+                    seriesLabel="Millivolts from average"
                     width={chartWidth}
-                    height={300}
                 />
-                <LineChart
-                    xAxis={[{ data: rateOfChangeTimes, label: "Time" }]}
-                    yAxis={[changeYAxis]}
-                    series={[
-                        {
-                            data: freqChange,
-                            label: "Frequency Change",
-                            area: false,
-                            showMark: false,
-                            curve: 'linear'
-                        }
-                    ]}
+                <CommonLineChart
+                    data={rateOfChangeList}
+                    yProp="frequencyDifference"
+                    seriesLabel="Frequency Change"
                     width={chartWidth}
-                    height={300}
                 />
-                <LineChart
-                    xAxis={[{ data: rateOfChangeTimes, label: "Time" }]}
-                    yAxis={[percentYAxis]}
-                    series={[
-                        {
-                            data: percentChange,
-                            label: "Percent Change",
-                            area: false,
-                            showMark: false,
-                            curve: 'linear'
-                        }
-                    ]}
+                <CommonLineChart
+                    data={rateOfChangeList}
+                    yProp="ratePercent"
+                    seriesLabel="Percent Change"
                     width={chartWidth}
                     height={300}
                 />
