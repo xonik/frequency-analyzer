@@ -11,7 +11,8 @@ const FileUploader: React.FC = () => {
         const reader = new FileReader();
         reader.onload = (e) => {
             const text = e.target?.result as string;
-            setLines(text.split(/\r?\n/));
+            const lines = text.split(/\r?\n/);
+            setLines(lines.filter(line => line.trim() !== "")); // Filter out empty lines
         };
         reader.readAsText(file);
     };

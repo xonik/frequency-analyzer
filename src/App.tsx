@@ -4,7 +4,7 @@ import {
     average,
     calculateFrequencyRateOfChangePercent, centsBetweenFrequencies, CentsEntry,
     createFrequencyProcessor, filterByMedianDeviation, findValueColumn, getMinMaxY,
-    parseLine, VoltsEntry,
+    parseLine, Sample, VoltsEntry,
 } from "./logic/calculator";
 import type {
     FrequencyEntry,
@@ -14,16 +14,19 @@ import type {
 import { FileLinesContext } from "./context/FileLinesContext";
 import { LineChart } from "@mui/x-charts";
 import './App.css';
+import BitmapPlot from "./components/BitmapPlot";
 
 function App() {
     const { lines } = useContext(FileLinesContext);
     const [averageFrequency, setAverageFrequency] = useState<number>(0);
+    const [waveSamples, setWaveSamples] = useState<Sample[]>([]);
     const [frequencyList, setFrequencyList] = useState<FrequencyEntry[]>([]);
     const [rateOfChangeList, setRateOfChangeList] = useState<RateOfChangeEntry[]>([]);
     const [centsDeviationList, setCentsDeviationList] = useState<CentsEntry[]>([]);
     const [voltsDeviationList, setVoltsDeviationList] = useState<VoltsEntry[]>([]);
     const [chartWidth, setChartWidth] = useState(window.innerWidth);
-    const [valueColumn, setValueColumn] = useState<number>(1);
+    const [frequencyColumn, setFrequencyColumn] = useState<number>(1);
+    const [waveColumn, setWaveColumn] = useState<number>(1);
 
 
     const [threshold, setThreshold] = useState<number>(() => {
@@ -56,6 +59,11 @@ function App() {
     }, [medianFilter]);
 
     useEffect(() => {
+        const waveSamples = lines.slice(1).map(line => parseLine(line, waveColumn));
+        setWaveSamples(waveSamples)
+    }, [lines, waveColumn]);
+
+    useEffect(() => {
         setLoading(true);
 
         setTimeout(() => { // Simulate async, remove if not needed
@@ -66,8 +74,7 @@ function App() {
             }
 
             const { processSample, frequencyList: freqList } = createFrequencyProcessor(threshold);
-
-            const samples = lines.slice(1).map((line) => parseLine(line, valueColumn))
+            const samples = lines.slice(1).map((line) => parseLine(line, frequencyColumn))
 
             samples.forEach((sample) => {
                 processSample(sample);
@@ -103,7 +110,7 @@ function App() {
             setRateOfChangeList(calculateFrequencyRateOfChangePercent(slicedList));
             setLoading(false);
         }, 10);
-    }, [lines, threshold, sliceLength, medianFilter, valueColumn]);
+    }, [lines, threshold, sliceLength, medianFilter, frequencyColumn]);
 
     useEffect(() => {
         const handleResize = () => setChartWidth(window.innerWidth);
@@ -177,10 +184,22 @@ function App() {
                         &nbsp;Median filter
                     </label>
                     <label style={{ marginLeft: 24 }}>
-                        Value column:&nbsp;
+                        Frequency column:&nbsp;
                         <select
-                            value={valueColumn}
-                            onChange={e => setValueColumn(Number(e.target.value))}
+                            value={frequencyColumn}
+                            onChange={e => setFrequencyColumn(Number(e.target.value))}
+                            disabled={columnNames.length === 0}
+                        >
+                            {columnNames.map((name, idx) => (
+                                <option key={idx + 1} value={idx + 1}>{name}</option>
+                            ))}
+                        </select>
+                    </label>
+                    <label style={{ marginLeft: 24 }}>
+                        Wave column:&nbsp;
+                        <select
+                            value={waveColumn}
+                            onChange={e => setWaveColumn(Number(e.target.value))}
                             disabled={columnNames.length === 0}
                         >
                             {columnNames.map((name, idx) => (
@@ -189,13 +208,14 @@ function App() {
                         </select>
                     </label>
                 </div>
+                <BitmapPlot samples={waveSamples} width={chartWidth-100} height={200} marginLeft={50} marginRight={40} />
                 <LineChart
                     xAxis={[{ data: frequencyTimes, label: "Time" }]}
                     yAxis={[freqYAxis]}
                     series={[
                         {
                             data: frequencies,
-                            label: `Frequency (avg: ${averageFrequency.toFixed(2)} Hz), ${columnNames[valueColumn - 1] || ''}`,
+                            label: `Frequency (avg: ${averageFrequency.toFixed(2)} Hz), ${columnNames[frequencyColumn - 1] || ''}`,
                             area: false,
                             showMark: false,
                             curve: 'linear'
