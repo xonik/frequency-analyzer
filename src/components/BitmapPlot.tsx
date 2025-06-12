@@ -20,10 +20,16 @@ const BitmapPlot: React.FC<BitmapPlotProps> = ({
                                                }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    // Compute min and max
-    const values = samples.map(s => s.value).filter(v => typeof v === 'number' && !isNaN(v));
-    const min = values.length > 0 ? Math.min(...values) : 0;
-    const max = values.length > 0 ? Math.max(...values) : 0;
+    let min = 0
+    let max = 0
+    samples.forEach(({value}) => {
+        if(value < min) {
+            min = value
+        }
+        if(value > max) {
+            max = value
+        }
+    })
 
     useEffect(() => {
         if (!canvasRef.current || samples.length === 0) return;
