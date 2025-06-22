@@ -17,22 +17,31 @@ export function parseLine(line: string, valueColumn: number): Sample {
 export function createFrequencyProcessor(threshold = 2.5) {
     let prevSample: Sample | null = null
     let isHigh = false;
+    let maxInCycle = 0;
     const frequencyList: FrequencyEntry[] = []
 
     function processSample(sample: Sample) {
-        if (prevSample !== null && !isHigh && sample.value >= threshold) {
+        // used for debouncing, we won't allow a state change unless the signal
+        // has reached a certain amplitude since last state change.
+        const amplitude = sample.value - threshold
+        if (isHigh && amplitude > maxInCycle || !isHigh && amplitude < maxInCycle) {
+            maxInCycle = amplitude
+        }
+        if (prevSample === null) {
+            prevSample = sample
+            isHigh = sample.value >= threshold
+        } else if (!isHigh && sample.value >= threshold && maxInCycle < -0.5) {
             const timeDiff = sample.time - prevSample.time
             if (timeDiff > 0) {
                 const frequency = roundToFiveSignificantDigits(1 / timeDiff)
                 frequencyList.push({ time: sample.time, frequency })
             }
             isHigh = true
+            maxInCycle = 0
             prevSample = sample
-        } else if (isHigh && sample.value < threshold) {
+        } else if (isHigh && sample.value < threshold && maxInCycle > 0.5) {
             isHigh = false
-        } else if (prevSample === null) {
-            prevSample = sample
-            isHigh = sample.value >= threshold
+            maxInCycle = 1
         }
     }
 
