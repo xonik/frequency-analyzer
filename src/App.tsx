@@ -21,9 +21,16 @@ function App() {
     const { lines } = useContext(FileLinesContext);
     const [averageFrequency, setAverageFrequency] = useState<number>(0);
     const [waveSamples, setWaveSamples] = useState<Sample[]>([]);
+
     const [frequencyList, setFrequencyList] = useState<Sample[]>([]);
-    const [rateOfChangeList, setRateOfChangeList] = useState<RateOfChangeEntry[]>([]);
+    const [filteredFrequencyList, setFilteredFrequencyList] = useState<Sample[]>([]);
+    const [backgroundFrequencyList, setBackgroundFrequencyList] = useState<Sample[]>([]);
+
     const [centsDeviationList, setCentsDeviationList] = useState<Sample[]>([]);
+    const [filteredCentsDeviationList, setFilteredCentsDeviationList] = useState<Sample[]>([]);
+    const [backgroundCentsDeviationList, setBackgroundCentsDeviationList] = useState<Sample[]>([]);
+
+    const [rateOfChangeList, setRateOfChangeList] = useState<RateOfChangeEntry[]>([]);
     const [voltsDeviationList, setVoltsDeviationList] = useState<Sample[]>([]);
     const [chartWidth, setChartWidth] = useState(window.innerWidth);
     const [loading, setLoading] = useState(false);
@@ -32,14 +39,7 @@ function App() {
     const [frequencyColumn, setFrequencyColumn] = usePersistedState<number>('frequencyColumn', 1);
     const [waveColumn, setWaveColumn] = usePersistedState<number>('waveColumn', 1);
     const [sliceLength, setSliceLength] = usePersistedState<string>('sliceLength', '');
-
-    const [movingAverage, setMovingAverage] = usePersistedState<boolean>('movingAverage', false);
     const [movingAverageWindow, setMovingAverageWindow] = usePersistedState<number>('movingAverageWindow', 4);
-
-    const [medianFilter, setMedianFilter] = usePersistedState<boolean>('medianFilter', false);
-    const [medianDeviation, setMedianDeviation] = usePersistedState<number>('medianDeviation', 0.5);
-    const [percentileFilter, setPercentileFilter] = usePersistedState<boolean>('percentileFilter', false);
-    const [percentile, setPercentile] = usePersistedState<number>('percentile', 95);
     const [threshold, setThreshold] = usePersistedState<number>("threshold", 2.5);
 
     const columnNames = lines.length > 0 ? lines[0].split(',').slice(1) : [];
@@ -73,49 +73,59 @@ function App() {
 
             // Remove the first entry as it has probably not measured a full
             // interval.
-            let slicedList = freqList.slice(1)
+            let frequencies = freqList.slice(1)
 
             // Apply sliceLength if valid and not empty
             if (sliceLength !== '') {
                 const n = Number(sliceLength);
                 if (!isNaN(n) && n > 0) {
-                    slicedList = slicedList.slice(0, n);
+                    frequencies = frequencies.slice(0, n);
                 }
-                setLastTimestamp(slicedList[slicedList.length - 1]?.time || undefined);
+                setLastTimestamp(frequencies[frequencies.length - 1]?.time || undefined);
             } else {
                 setLastTimestamp(undefined)
             }
 
-            if (medianFilter) {
-                slicedList = filterByMedianDeviation(slicedList, medianDeviation);
-            }
-
-            if (percentileFilter) {
-                const lowerPercentile = (100 - percentile) / 100
-                const upperPercentile = percentile / 100
-                slicedList = filterByPercentile(slicedList, lowerPercentile, upperPercentile);
-            }
-
-            if (movingAverage) {
-                slicedList = slicedList.map(movingAverageNKMapper(movingAverageWindow, movingAverageWindow));
-            }
-
-            setFrequencyList(slicedList);
-
-            const calculatedAverage = average(slicedList)
+            const calculatedAverage = average(frequencies)
             setAverageFrequency(calculatedAverage)
 
-            const cents = slicedList.map(centsBetweenFrequencies(calculatedAverage))
+            setFrequencyList(frequencies);
+
+            const cents = frequencies.map(centsBetweenFrequencies(calculatedAverage))
             const volts = cents.map(
                 (entry) => ({ time: entry.time, value: 1000 * entry.value / 1200 }))
 
             setCentsDeviationList(cents);
             setVoltsDeviationList(volts);
 
-            setRateOfChangeList(calculateFrequencyRateOfChangePercent(slicedList));
+            setRateOfChangeList(calculateFrequencyRateOfChangePercent(frequencies));
+
+
+            const filteredFrequencies = frequencies.map(movingAverageNKMapper(movingAverageWindow, movingAverageWindow));
+            setFilteredFrequencyList(filteredFrequencies);
+            setBackgroundFrequencyList(
+                frequencies.map((entry, index) => {
+                    return {
+                        ...entry,
+                        value: entry.value - filteredFrequencies[index].value + calculatedAverage
+                    }
+                })
+            )
+
+            const filteredCents = cents.map(movingAverageNKMapper(movingAverageWindow, movingAverageWindow));
+            setFilteredCentsDeviationList(filteredCents);
+            setBackgroundCentsDeviationList(
+                cents.map((entry, index) => {
+                    return {
+                        ...entry,
+                        value: entry.value - filteredCents[index].value
+                    }
+                })
+            )
+
             setLoading(false);
         }, 10);
-    }, [lines, threshold, sliceLength, medianFilter, frequencyColumn, medianDeviation, percentileFilter, percentile, movingAverage, movingAverageWindow]);
+    }, [lines, threshold, sliceLength, frequencyColumn,movingAverageWindow]);
 
     useEffect(() => {
         const handleResize = () => setChartWidth(window.innerWidth);
@@ -161,16 +171,8 @@ function App() {
                             placeholder="All"
                         />
                     </label>
-                    <label style={{ marginLeft: 24 }}>
-                        <input
-                            type="checkbox"
-                            checked={movingAverage}
-                            onChange={e => setMovingAverage(e.target.checked)}
-                        />
-                        &nbsp;Moving average
-                    </label>
                     <label style={{ marginLeft: 8 }}>
-                        Window:&nbsp;
+                        Moving avg window:&nbsp;
                         <input
                             type="number"
                             step="1"
@@ -178,47 +180,9 @@ function App() {
                             value={movingAverageWindow}
                             onChange={e => setMovingAverageWindow(Number(e.target.value))}
                             style={{ width: 60 }}
-                            disabled={!movingAverage}
                         />
                     </label>
-                    <label style={{ marginLeft: 24 }}>
-                        <input
-                            type="checkbox"
-                            checked={medianFilter}
-                            onChange={e => setMedianFilter(e.target.checked)}
-                        />
-                        &nbsp;Median filter
-                    </label>
-                    <label style={{ marginLeft: 8 }}>
-                        Max deviation:&nbsp;
-                        <input
-                            type="number"
-                            step="0.05"
-                            min="0"
-                            value={medianDeviation}
-                            onChange={e => setMedianDeviation(Number(e.target.value))}
-                            style={{ width: 60 }}
-                        />
-                    </label>
-                    <label style={{ marginLeft: 24 }}>
-                        <input
-                            type="checkbox"
-                            checked={percentileFilter}
-                            onChange={e => setPercentileFilter(e.target.checked)}
-                        />
-                        &nbsp;Percentile filter
-                    </label>
-                    <label style={{ marginLeft: 8 }}>
-                        Percentile:&nbsp;
-                        <input
-                            type="number"
-                            step="1"
-                            min="0"
-                            value={percentile}
-                            onChange={e => setPercentile(Number(e.target.value))}
-                            style={{ width: 60 }}
-                        />
-                    </label>
+
                     <Dropdown
                         label="Frequency column:"
                         value={frequencyColumn}
@@ -244,33 +208,33 @@ function App() {
                     marginLeft={55}
                     marginRight={40}/>
                 <CommonLineChart
-                    data={frequencyList}
+                    data={[backgroundFrequencyList, frequencyList, filteredFrequencyList]}
                     yProp="value"
-                    seriesLabel={`Frequency (avg: ${averageFrequency.toFixed(2)} Hz), ${columnNames[frequencyColumn - 1] || ''}`}
+                    seriesLabels={['Background', `Frequency (avg: ${averageFrequency.toFixed(2)} Hz), ${columnNames[frequencyColumn - 1] || ''}`, 'Filtered frequency']}
                     width={chartWidth}
                 />
                 <CommonLineChart
-                    data={centsDeviationList}
+                    data={[backgroundCentsDeviationList, centsDeviationList, filteredCentsDeviationList]}
                     yProp="value"
-                    seriesLabel="Cents from average"
+                    seriesLabels={['Background', "Cents from average", 'Filtered cents']}
                     width={chartWidth}
                 />
                 <CommonLineChart
-                    data={voltsDeviationList}
+                    data={[voltsDeviationList]}
                     yProp="value"
-                    seriesLabel="Millivolts from average"
+                    seriesLabels={["Millivolts from average"]}
                     width={chartWidth}
                 />
                 <CommonLineChart
-                    data={rateOfChangeList}
+                    data={[rateOfChangeList]}
                     yProp="frequencyDifference"
-                    seriesLabel="Frequency Change"
+                    seriesLabels={["Frequency Change"]}
                     width={chartWidth}
                 />
                 <CommonLineChart
-                    data={rateOfChangeList}
+                    data={[rateOfChangeList]}
                     yProp="ratePercent"
-                    seriesLabel="Percent Change"
+                    seriesLabels={["Percent Change"]}
                     width={chartWidth}
                     height={300}
                 />

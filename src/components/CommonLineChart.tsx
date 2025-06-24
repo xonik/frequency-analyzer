@@ -1,45 +1,57 @@
 import React from 'react';
-import { LineChart } from "@mui/x-charts";
+import { LineChart } from '@mui/x-charts/LineChart';
 import { getMinMaxY } from "../logic/calculator";
 
-type CommonLineChartProps<T> = {
-    data: T[];
+type CommonLineChartProps<T extends { time: number }> = {
+    data: T[][];
     yProp: keyof T;
-    seriesLabel: string;
-    width: number;
+    seriesLabels: string[];
+    colors?: string[];
+    width?: number;
     height?: number;
-    showMinMax?: boolean;
 };
 
-const CommonLineChart = <T extends { time: number }>(
-    { data, yProp, seriesLabel, width, height = 300, showMinMax = true }: CommonLineChartProps<T>
-) => {
-    const xData = data.map(entry => entry.time);
-    const yData = data.map(entry => entry[yProp] as number);
-    const yAxis = getMinMaxY(yData);
+const defaultColors = ['#34756D', '#342cfb', '#fd0303', '#ff7300', '#ff0000', '#0088FE', '#00C49F'];
 
-    let label = seriesLabel;
-    if (showMinMax && yData.length > 0) {
-        label += ` (min: ${yAxis.min.toFixed(2)}, max: ${yAxis.max.toFixed(2)})`;
-    }
+function CommonLineChart<T extends { time: number }>({
+                                                         data,
+                                                         yProp,
+                                                         seriesLabels,
+                                                         colors = defaultColors,
+                                                         width = 800,
+                                                         height = 200,
+                                                     }: CommonLineChartProps<T>) {
+
+
+    const series = data.map((dataset, idx) => {
+
+        const yData =  dataset.map(d => d[yProp] as number)
+        const yAxis = getMinMaxY(yData);
+
+        let label = seriesLabels[idx] ?? `Series ${idx + 1}`
+        if (yData.length > 0) {
+            label += ` (min: ${yAxis.min.toFixed(2)}, max: ${yAxis.max.toFixed(2)})`;
+        }
+
+        return ({
+            data: yData,
+            label: label,
+            color: colors[idx % colors.length],
+            showMark: false,
+            id: `series-${idx}`,
+        })
+    });
 
     return (
         <LineChart
-            xAxis={[{ data: xData, label: "Time" }]}
-            yAxis={[yAxis]}
-            series={[
-                {
-                    data: yData,
-                    label,
-                    area: false,
-                    showMark: false,
-                    curve: 'linear'
-                }
-            ]}
             width={width}
             height={height}
+            series={series}
+            xAxis={[{ data: data[0]?.map(d => d.time) ?? [], label: 'Time' }]}
+            yAxis={[{ label: String(yProp), tickLabelStyle: { fontSize: 10 } }]}
+            legend={{ hidden: false }}
         />
     );
-};
+}
 
 export default CommonLineChart;
