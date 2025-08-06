@@ -16,6 +16,10 @@ export function createFrequencyProcessor(threshold = 2.5) {
     let isHigh = false;
     let maxInCycle = 0;
     const frequencyList: Sample[] = []
+    const pulseWidthList: Sample[] = []
+
+    let cycleStartTime: number = 0
+    let highTime: number = 0
 
     function processSample(sample: Sample) {
         // used for debouncing, we won't allow a state change unless the signal
@@ -27,22 +31,34 @@ export function createFrequencyProcessor(threshold = 2.5) {
         if (prevSample === null) {
             prevSample = sample
             isHigh = sample.value >= threshold
+            isHigh = sample.value >= threshold;
+            cycleStartTime = sample.time;
         } else if (!isHigh && sample.value >= threshold && maxInCycle < -0.5) {
             const timeDiff = sample.time - prevSample.time
             if (timeDiff > 0) {
                 const frequency = roundToFiveSignificantDigits(1 / timeDiff)
                 frequencyList.push({ time: sample.time, value: frequency })
+
+                // Calculate pulse width percentage for the last cycle
+                const cycleDuration = (sample.time - (cycleStartTime ?? sample.time));
+                const pulseWidthPercent = cycleDuration > 0 ? (highTime / cycleDuration) * 100 : 0;
+                pulseWidthList.push({ time: sample.time, value: pulseWidthPercent });
+
+                // Reset for next cycle
+                cycleStartTime = sample.time;
+                highTime = 0;
             }
             isHigh = true
             maxInCycle = 0
             prevSample = sample
         } else if (isHigh && sample.value < threshold && maxInCycle > 0.5) {
+            highTime = sample.time - cycleStartTime
             isHigh = false
             maxInCycle = 1
         }
     }
 
-    return { processSample, frequencyList }
+    return { processSample, frequencyList, pulseWidthList }
 }
 
 export function calculateFrequencyRateOfChangePercent(frequencies: Sample[]): RateOfChangeEntry[] {
