@@ -31,7 +31,6 @@ export function createFrequencyProcessor(threshold = 2.5) {
         if (prevSample === null) {
             prevSample = sample
             isHigh = sample.value >= threshold
-            isHigh = sample.value >= threshold;
             cycleStartTime = sample.time;
         } else if (!isHigh && sample.value >= threshold && maxInCycle < -0.5) {
             const timeDiff = sample.time - prevSample.time
