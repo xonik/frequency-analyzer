@@ -2,13 +2,8 @@ import React, { useContext, useEffect, useState } from 'react';
 import SamplesFileUploader from "./components/SamplesFileUploader";
 import AnalyzedFileUploader from "./components/AnalyzedFileUploader";
 import {
-    average,
-    calculateFrequencyRateOfChangePercent, centsBetweenFrequencies,
-    createFrequencyProcessor, filterByMedianDeviation, filterByPercentile, movingAverageNKMapper,
+    createFrequencyProcessor,
     parseLine, Sample
-} from "./logic/calculator";
-import type {
-    RateOfChangeEntry,
 } from "./logic/calculator";
 
 import { SampleFileLinesContext } from "./context/SampleFileLinesContext";
@@ -18,28 +13,18 @@ import CommonLineChart from "./components/CommonLineChart";
 import Dropdown from "./components/Dropdown";
 import usePersistedState from "./hooks/usePersistedState";
 import './App.css';
+import useFrequencyProcessor from "./hooks/useFrequencyProcessor";
 
 function App() {
     const { lines } = useContext(SampleFileLinesContext);
     const { lines: analyzedLines } = useContext(AnalyzedFileLinesContext);
-    const [averageFrequency, setAverageFrequency] = useState<number>(0);
     const [waveSamples, setWaveSamples] = useState<Sample[]>([]);
 
     const [rawFrequencies, setRawFrequencies] = useState<Sample[]>([]);
     const [pwSamples, setPwSamples] = useState<Sample[]>([]);
-    const [frequencyList, setFrequencyList] = useState<Sample[]>([]);
-    const [filteredFrequencyList, setFilteredFrequencyList] = useState<Sample[]>([]);
-    const [backgroundFrequencyList, setBackgroundFrequencyList] = useState<Sample[]>([]);
 
-    const [centsDeviationList, setCentsDeviationList] = useState<Sample[]>([]);
-    const [filteredCentsDeviationList, setFilteredCentsDeviationList] = useState<Sample[]>([]);
-    const [backgroundCentsDeviationList, setBackgroundCentsDeviationList] = useState<Sample[]>([]);
-
-    const [rateOfChangeList, setRateOfChangeList] = useState<RateOfChangeEntry[]>([]);
-    const [voltsDeviationList, setVoltsDeviationList] = useState<Sample[]>([]);
     const [chartWidth, setChartWidth] = useState(window.innerWidth);
     const [loading, setLoading] = useState(false);
-    const [lastTimestamp, setLastTimestamp] = useState<number | undefined>(undefined);
 
     const [frequencyColumn, setFrequencyColumn] = usePersistedState<number>('frequencyColumn', 1);
     const [waveColumn, setWaveColumn] = usePersistedState<number>('waveColumn', 1);
@@ -49,27 +34,17 @@ function App() {
 
     const columnNames = lines.length > 0 ? lines[0].split(',').slice(1) : [];
 
-
-    useEffect(() => {
-        let waveSamples = lines.slice(1).map(line => parseLine(line, waveColumn));
-        if (lastTimestamp) {
-            const firstToCut = waveSamples.findIndex(sample => sample.time > lastTimestamp)
-            waveSamples = waveSamples.slice(0, firstToCut)
-        }
-        setWaveSamples(waveSamples)
-    }, [lines, waveColumn, lastTimestamp]);
-
     useEffect(() => {
         let frequencySamples = analyzedLines.slice(1).map(line => parseLine(line, 1));
         let pwSamples = analyzedLines.slice(1).map(line => parseLine(line, 2));
 
-        if (lastTimestamp) {
+        /*if (lastTimestamp) {
             const firstFreqToCut = frequencySamples.findIndex(sample => sample.time > lastTimestamp)
             frequencySamples = frequencySamples.slice(0, firstFreqToCut)
 
             const firstPwToCut = pwSamples.findIndex(sample => sample.time > lastTimestamp)
             pwSamples = pwSamples.slice(0, firstPwToCut)
-        }
+        }*/
         setRawFrequencies(frequencySamples)
         setPwSamples(pwSamples)
         setWaveSamples([])
@@ -79,8 +54,7 @@ function App() {
         setPwSamples([])
         setLoading(true);
 
-        setTimeout(() => { // Simulate async, remove if not needed
-
+        setTimeout(() => {
             if (lines.length < 1) {
                 setLoading(false);
                 return
@@ -96,62 +70,32 @@ function App() {
             // Remove the first entry as it has probably not measured a full
             // interval.
             setRawFrequencies(freqList.slice(1))
+            setLoading(false);
         }, 10)
     }, [lines, threshold, frequencyColumn]);
 
+    const {
+        backgroundFrequencyList,
+        frequencyList,
+        filteredFrequencyList,
+        averageFrequency,
+        backgroundCentsDeviationList,
+        centsDeviationList,
+        filteredCentsDeviationList,
+        voltsDeviationList,
+        rateOfChangeList,
+        lastTimestamp,
+    } = useFrequencyProcessor(rawFrequencies, movingAverageWindow, sliceLength);
+
 
     useEffect(() => {
-        // Apply sliceLength if valid and not empty
-        let frequencies = rawFrequencies
-        if (sliceLength !== '') {
-            const n = Number(sliceLength);
-            if (!isNaN(n) && n > 0) {
-                frequencies = frequencies.slice(0, n);
-            }
-            setLastTimestamp(frequencies[frequencies.length - 1]?.time || undefined);
-        } else {
-            setLastTimestamp(undefined)
+        let waveSamples = lines.slice(1).map(line => parseLine(line, waveColumn));
+        if (lastTimestamp) {
+            const firstToCut = waveSamples.findIndex(sample => sample.time > lastTimestamp)
+            waveSamples = waveSamples.slice(0, firstToCut)
         }
-
-        const calculatedAverage = average(frequencies)
-        setAverageFrequency(calculatedAverage)
-
-        setFrequencyList(frequencies);
-
-        const cents = frequencies.map(centsBetweenFrequencies(calculatedAverage))
-        const volts = cents.map(
-            (entry) => ({ time: entry.time, value: 1000 * entry.value / 1200 }))
-
-        setCentsDeviationList(cents);
-        setVoltsDeviationList(volts);
-
-        setRateOfChangeList(calculateFrequencyRateOfChangePercent(frequencies));
-
-
-        const filteredFrequencies = frequencies.map(movingAverageNKMapper(movingAverageWindow, movingAverageWindow));
-        setFilteredFrequencyList(filteredFrequencies);
-        setBackgroundFrequencyList(
-            frequencies.map((entry, index) => {
-                return {
-                    ...entry,
-                    value: entry.value - filteredFrequencies[index].value + calculatedAverage
-                }
-            })
-        )
-
-        const filteredCents = cents.map(movingAverageNKMapper(movingAverageWindow, movingAverageWindow));
-        setFilteredCentsDeviationList(filteredCents);
-        setBackgroundCentsDeviationList(
-            cents.map((entry, index) => {
-                return {
-                    ...entry,
-                    value: entry.value - filteredCents[index].value
-                }
-            })
-        )
-
-        setLoading(false);
-    }, [rawFrequencies, movingAverageWindow]);
+        setWaveSamples(waveSamples)
+    }, [lines, waveColumn, lastTimestamp]);
 
     useEffect(() => {
         const handleResize = () => setChartWidth(window.innerWidth);
