@@ -28,7 +28,7 @@ rl.on('close', () => {
     const outFile = path.format({
         dir: path.dirname(filePath),
         name: path.parse(filePath).name + `-analyzed-${new Date().toISOString()}`,
-        ext: '.csv'
+        ext: '.json'
     });
 
     // Write CSV header

@@ -1,8 +1,8 @@
 import React, { useContext } from 'react';
-import { FileLinesContext } from "../context/FileLinesContext";
+import { SampleFileLinesContext } from "../context/SampleFileLinesContext";
 
-const FileUploader: React.FC = () => {
-    const { setLines } = useContext(FileLinesContext);
+const SamplesFileUploader: React.FC = () => {
+    const { setLines } = useContext(SampleFileLinesContext);
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -19,9 +19,9 @@ const FileUploader: React.FC = () => {
 
     return (
         <div>
-            <input type="file" accept="*" onChange={handleFileChange} />
+            Samples file: <input type="file" accept="*" onChange={handleFileChange} />
         </div>
     );
 };
 
-export default FileUploader;
+export default SamplesFileUploader;
